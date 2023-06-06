@@ -13,18 +13,18 @@ defmodule Pmx do
     tmp_dir = System.tmp_dir!()
 
     lock["dependencies"]
-    |> IO.inspect()
     |> Task.async_stream(fn dep ->
       dep
       |> Pmx.Dep.new()
       |> then(fn dep ->
-        Logger.info("Dependency: #{dep.package} @ #{dep.version}")
-        IO.inspect(dep)
+        # Logger.debug("Installing: #{dep.package} @ #{dep.version}")
+        # IO.inspect(dep)
         dep
       end)
       |> download!(tmp_dir)
       |> verify!()
       |> extract!(to_dir)
+      |> warn_about_scripts!()
     end)
     |> Enum.to_list()
   end
@@ -44,16 +44,12 @@ defmodule Pmx do
         other -> {other, &Base.encode64/1}
       end
 
-    IO.inspect(algo)
-
     calculated_hash =
       dep.local_file
       |> File.stream!([], 2048)
       |> Enum.reduce(:crypto.hash_init(algo), fn line, acc -> :crypto.hash_update(acc, line) end)
       |> :crypto.hash_final()
       |> encoder.()
-
-    IO.inspect({calculated_hash, hash})
 
     ^calculated_hash = hash
     %{dep | valid?: true}
@@ -79,6 +75,16 @@ defmodule Pmx do
     with {:ok, files} <- :erl_tar.extract(filepath, [:memory, :compressed]) do
       files
       |> Task.async_stream(fn {filename, content} ->
+        filename = to_string(filename)
+
+        filename =
+          if String.starts_with?(filename, "package/") do
+            "package/" <> rest = filename
+            rest
+          else
+            filename
+          end
+
         filepath = Path.join(target_dir, filename)
         dirpath = Path.dirname(filepath)
         File.mkdir_p!(dirpath)
@@ -86,5 +92,30 @@ defmodule Pmx do
       end)
       |> Stream.run()
     end
+  end
+
+  def warn_about_scripts!(dep) do
+    case File.read(Path.join(dep.installed_path, "package.json")) do
+      {:ok, contents} ->
+        package = Jason.decode!(contents)
+
+        Enum.each(Map.get(package, "scripts", []), fn {phase, script} ->
+          if relevant_script?(phase) do
+            Logger.warn(
+              "Package '#{dep.package}' would have wanted to run a '#{phase}' script: #{script}"
+            )
+          end
+        end)
+
+      _ ->
+        dep
+    end
+  end
+
+  @installtime ["install", "prepare", "publish"]
+  defp relevant_script?(phase) do
+    Enum.any?(@installtime, fn relevant ->
+      String.ends_with?(phase, relevant)
+    end)
   end
 end

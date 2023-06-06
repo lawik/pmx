@@ -3,7 +3,7 @@ defmodule PmxTest do
   doctest Pmx
 
   test "greets the world" do
-    "redacted"
+    System.get_env("REDACTED_PATH")
     |> Path.expand()
     |> Pmx.load_package!("/tmp/nerd-modules")
   end

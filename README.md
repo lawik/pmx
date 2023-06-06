@@ -1,6 +1,6 @@
 # Pmx
 
-**TODO: Add description**
+Experiment in installing NPM packages via Elixir.
 
 ## Installation
 
@@ -10,7 +10,7 @@ by adding `pmx` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:pmx, "~> 0.1.0"}
+    {:pmx, github: "lawik/pmx"}
   ]
 end
 ```
